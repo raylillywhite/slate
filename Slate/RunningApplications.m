@@ -261,70 +261,117 @@ static void windowCallback(AXObserverRef observer, AXUIElementRef element, CFStr
     titleToWindow = [NSMutableDictionary dictionary];
     SlateLogger(@"------------------ Checking Running Applications ------------------");
     NSArray *appsArr = [[NSWorkspace sharedWorkspace] runningApplications];
-    NSRunningApplication *currentApp = [NSRunningApplication currentApplication];
-    for (NSRunningApplication *app in appsArr) {
-      if ([RunningApplications isAppSelectable:app]) {
-        SlateLogger(@"  Selectable: %@", [app localizedName]);
-        [apps addObject:app];
-        [appNameToApp setObject:app forKey:[app localizedName]];
-        SlateLogger(@"    I see application '%@'", [app localizedName]);
-        // check for windows
-        NSNumber *appPID = [NSNumber numberWithInteger:[app processIdentifier]];
-        [appToWindows setObject:[NSMutableArray array] forKey:appPID];
-        AXUIElementRef appRef = AXUIElementCreateApplication([app processIdentifier]);
-        CFArrayRef windowsArr = [AccessibilityWrapper windowsInApp:appRef];
-        if (windowsArr && CFArrayGetCount(windowsArr) > 0) {
-          SlateLogger(@"      Has Windows: %@", [app localizedName]);
-          for (NSInteger i = 0; i < CFArrayGetCount(windowsArr); i++) {
-            NSMutableArray *windowInfo = [NSMutableArray array];
-            AXUIElementRef window = CFArrayGetValueAtIndex(windowsArr, i);
-            NSString *title = [AccessibilityWrapper getTitle:window];
-            if (title == nil || [EMPTY isEqualToString:title]) continue; // skip empty title windows because they are invisible
-            SlateLogger(@"        Title: %@", title);
-            [windowInfo addObject:title];
-            [windowInfo addObject:app];
-            [windowInfo addObject:[NSNumber numberWithInteger:nextWindowNumber]];
-            if ([self isCurrentApplication:app] && [AccessibilityWrapper isMainWindow:window]) {
-              [windows insertObject:windowInfo atIndex:0];
-              [[appToWindows objectForKey:appPID] insertObject:windowInfo atIndex:0];
-            } else if ([AccessibilityWrapper isMainWindow:window]) {
-              [windows addObject:windowInfo];
-              [[appToWindows objectForKey:appPID] insertObject:windowInfo atIndex:0];
-            } else {
-              [windows addObject:windowInfo];
-              [[appToWindows objectForKey:appPID] addObject:windowInfo];
-            }
-            NSMutableArray *windowsForTitle = [titleToWindow objectForKey:title];
-            if (!windowsForTitle) {
-              [titleToWindow setObject:[NSMutableArray arrayWithObject:windowInfo] forKey:title];
-            } else {
-              [windowsForTitle addObject:windowInfo];
-              [titleToWindow setObject:windowsForTitle forKey:title];
-            }
-            registerForWindowDeath(window, self);
-            nextWindowNumber++;
+      __block NSRunningApplication *currentApp = [NSRunningApplication currentApplication];
+      for (NSRunningApplication *app in appsArr) {
+          if ([RunningApplications isAppSelectable:app]) {
+              SlateLogger(@"  Selectable: %@", [app localizedName]);
+              [apps addObject:app];
+              [appNameToApp setObject:app forKey:[app localizedName]];
+              SlateLogger(@"    I see application '%@'", [app localizedName]);
+              // check for windows
+              NSNumber *appPID = [NSNumber numberWithInteger:[app processIdentifier]];
+              [appToWindows setObject:[NSMutableArray array] forKey:appPID];
+              AXUIElementRef appRef = AXUIElementCreateApplication([app processIdentifier]);
+              dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+                  
+                  CFArrayRef windowsArr = [AccessibilityWrapper windowsInApp:appRef];
+                  
+                  dispatch_async(dispatch_get_main_queue(), ^{
+                      
+                      if (windowsArr && CFArrayGetCount(windowsArr) > 0) {
+                          SlateLogger(@"      Has Windows: %@", [app localizedName]);
+                          for (NSInteger i = 0; i < CFArrayGetCount(windowsArr); i++) {
+                              NSMutableArray *windowInfo = [NSMutableArray array];
+                              AXUIElementRef window = CFArrayGetValueAtIndex(windowsArr, i);
+                              NSString *title = [AccessibilityWrapper getTitle:window];
+                              if (title == nil || [EMPTY isEqualToString:title]) continue; // skip empty title windows because they are invisible
+                              SlateLogger(@"        Title: %@", title);
+                              [windowInfo addObject:title];
+                              [windowInfo addObject:app];
+                              [windowInfo addObject:[NSNumber numberWithInteger:nextWindowNumber]];
+                              if ([self isCurrentApplication:app] && [AccessibilityWrapper isMainWindow:window]) {
+                                  [windows insertObject:windowInfo atIndex:0];
+                                  [[appToWindows objectForKey:appPID] insertObject:windowInfo atIndex:0];
+                              } else if ([AccessibilityWrapper isMainWindow:window]) {
+                                  [windows addObject:windowInfo];
+                                  [[appToWindows objectForKey:appPID] insertObject:windowInfo atIndex:0];
+                              } else {
+                                  [windows addObject:windowInfo];
+                                  [[appToWindows objectForKey:appPID] addObject:windowInfo];
+                              }
+                              NSMutableArray *windowsForTitle = [titleToWindow objectForKey:title];
+                              if (!windowsForTitle) {
+                                  [titleToWindow setObject:[NSMutableArray arrayWithObject:windowInfo] forKey:title];
+                              } else {
+                                  [windowsForTitle addObject:windowInfo];
+                                  [titleToWindow setObject:windowsForTitle forKey:title];
+                              }
+                              registerForWindowDeath(window, self);
+                              nextWindowNumber++;
+                          }
+                      }
+                      if ([self isCurrentApplication:app]) {
+                          currentApp = app;
+                      }
+                      if (windowsArr && CFArrayGetCount(windowsArr) > 0) {
+                          SlateLogger(@"      Has Windows: %@", [app localizedName]);
+                          for (NSInteger i = 0; i < CFArrayGetCount(windowsArr); i++) {
+                              NSMutableArray *windowInfo = [NSMutableArray array];
+                              AXUIElementRef window = CFArrayGetValueAtIndex(windowsArr, i);
+                              NSString *title = [AccessibilityWrapper getTitle:window];
+                              if (title == nil || [EMPTY isEqualToString:title]) continue; // skip empty title windows because they are invisible
+                              SlateLogger(@"        Title: %@", title);
+                              [windowInfo addObject:title];
+                              [windowInfo addObject:app];
+                              [windowInfo addObject:[NSNumber numberWithInteger:nextWindowNumber]];
+                              if ([self isCurrentApplication:app] && [AccessibilityWrapper isMainWindow:window]) {
+                                  [windows insertObject:windowInfo atIndex:0];
+                                  [[appToWindows objectForKey:appPID] insertObject:windowInfo atIndex:0];
+                              } else if ([AccessibilityWrapper isMainWindow:window]) {
+                                  [windows addObject:windowInfo];
+                                  [[appToWindows objectForKey:appPID] insertObject:windowInfo atIndex:0];
+                              } else {
+                                  [windows addObject:windowInfo];
+                                  [[appToWindows objectForKey:appPID] addObject:windowInfo];
+                              }
+                              NSMutableArray *windowsForTitle = [titleToWindow objectForKey:title];
+                              if (!windowsForTitle) {
+                                  [titleToWindow setObject:[NSMutableArray arrayWithObject:windowInfo] forKey:title];
+                              } else {
+                                  [windowsForTitle addObject:windowInfo];
+                                  [titleToWindow setObject:windowsForTitle forKey:title];
+                              }
+                              registerForWindowDeath(window, self);
+                              nextWindowNumber++;
+                          }
+                      }
+                      if ([self isCurrentApplication:app]) {
+                          currentApp = app;
+                      }
+                  });
+              });
+              dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+                  
+                  AXError err;
+                  AXUIElementRef sendingApp = AXUIElementCreateApplication([app processIdentifier]);
+                  AXObserverRef observer;
+                  err = AXObserverCreate([app processIdentifier], windowCallback, &observer);
+                  err = AXObserverAddNotification(observer, sendingApp, kAXWindowCreatedNotification, (__bridge void *)self);
+                  err = AXObserverAddNotification(observer, sendingApp, kAXFocusedWindowChangedNotification, (__bridge void *)self);
+                  err = AXObserverAddNotification(observer, sendingApp, kAXTitleChangedNotification, (__bridge void *)self);
+                  if (err != kAXErrorSuccess) {
+                      AXObserverRemoveNotification(observer, sendingApp, kAXWindowCreatedNotification);
+                      AXObserverRemoveNotification(observer, sendingApp, kAXFocusedWindowChangedNotification);
+                      AXObserverRemoveNotification(observer, sendingApp, kAXTitleChangedNotification);
+                  } else {
+                      CFRunLoopAddSource ([[NSRunLoop currentRunLoop] getCFRunLoop], AXObserverGetRunLoopSource(observer), kCFRunLoopDefaultMode);
+                      dispatch_async(dispatch_get_main_queue(), ^{
+                          [pidToObserver setObject:[NSValue valueWithPointer:observer] forKey:[NSNumber numberWithInteger:[app processIdentifier]]];
+                      });
+                  }
+              });
           }
-        }
-        if ([self isCurrentApplication:app]) {
-          currentApp = app;
-        }
-        AXError err;
-        AXUIElementRef sendingApp = AXUIElementCreateApplication([app processIdentifier]);
-        AXObserverRef observer;
-        err = AXObserverCreate([app processIdentifier], windowCallback, &observer);
-        err = AXObserverAddNotification(observer, sendingApp, kAXWindowCreatedNotification, (__bridge void *)self);
-        err = AXObserverAddNotification(observer, sendingApp, kAXFocusedWindowChangedNotification, (__bridge void *)self);
-        err = AXObserverAddNotification(observer, sendingApp, kAXTitleChangedNotification, (__bridge void *)self);
-        if (err != kAXErrorSuccess) {
-          AXObserverRemoveNotification(observer, sendingApp, kAXWindowCreatedNotification);
-          AXObserverRemoveNotification(observer, sendingApp, kAXFocusedWindowChangedNotification);
-          AXObserverRemoveNotification(observer, sendingApp, kAXTitleChangedNotification);
-        } else {
-          CFRunLoopAddSource ([[NSRunLoop currentRunLoop] getCFRunLoop], AXObserverGetRunLoopSource(observer), kCFRunLoopDefaultMode);
-          [pidToObserver setObject:[NSValue valueWithPointer:observer] forKey:[NSNumber numberWithInteger:[app processIdentifier]]];
-        }
       }
-    }
     SlateLogger(@"CURRENT APP = '%@'", [currentApp localizedName]);
     [self bringAppToFront:currentApp];
     SlateLogger(@"------------------ Done Checking Running Applications ------------------");
@@ -367,34 +414,45 @@ static void windowCallback(AXObserverRef observer, AXUIElementRef element, CFStr
       SlateLogger(@"  PRUNE Because app died");
     }
   }
-  for (NSRunningApplication *app in apps) {
-    NSNumber *appPID = [NSNumber numberWithInteger:[app processIdentifier]];
-    NSMutableArray *oldWindowsInApp = [[appToWindows objectForKey:appPID] mutableCopy];
-    CFArrayRef windowsArr = [AccessibilityWrapper windowsInRunningApp:app];
-    // Remove all windows if app has no windows
-    if (!windowsArr || CFArrayGetCount(windowsArr) == 0) {
-      NSArray *windowsToRemove = [[appToWindows objectForKey:appPID] copy];
-      for (NSArray *windowInfo in windowsToRemove) {
-        [self removeWindow:windowInfo];
-        SlateLogger(@"  PRUNE Because app has no windows");
-      }
-      continue;
+    for (NSRunningApplication *app in apps) {
+        NSNumber *appPID = [NSNumber numberWithInteger:[app processIdentifier]];
+        NSMutableArray *oldWindowsInApp = [[appToWindows objectForKey:appPID] mutableCopy];
+        
+        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+            CFArrayRef windowsArr = [AccessibilityWrapper windowsInRunningApp:app];
+            dispatch_async(dispatch_get_main_queue(), ^{
+                // Remove all windows if app has no windows
+                if (!windowsArr || CFArrayGetCount(windowsArr) == 0) {
+                    NSArray *windowsToRemove = [[appToWindows objectForKey:appPID] copy];
+                    for (NSArray *windowInfo in windowsToRemove) {
+                        [self removeWindow:windowInfo];
+                        SlateLogger(@"  PRUNE Because app has no windows");
+                    }
+                    return;
+                }
+                // Remove windows that are no longer open. No need to add windows that we havn't seen because technically our callback should catch it.
+                for (NSArray *windowInfo in oldWindowsInApp) {
+                    
+                    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+                        BOOL found = NO;
+                        for (NSInteger i = 0; i < CFArrayGetCount(windowsArr); i++) {
+                            AXUIElementRef window = CFArrayGetValueAtIndex(windowsArr, i);
+                            if ([[windowInfo objectAtIndex:0] isEqualToString:[AccessibilityWrapper getTitle:window]]) {
+                                found = YES;
+                            }
+                        }
+                        if (!found)  {
+                            
+                            dispatch_async(dispatch_get_main_queue(), ^{
+                                [self removeWindow:windowInfo];
+                                SlateLogger(@"  PRUNE Because title mismatch");
+                            });
+                        }
+                    });
+                }
+            });
+        });
     }
-    // Remove windows that are no longer open. No need to add windows that we havn't seen because technically our callback should catch it.
-    for (NSArray *windowInfo in oldWindowsInApp) {
-      BOOL found = NO;
-      for (NSInteger i = 0; i < CFArrayGetCount(windowsArr); i++) {
-        AXUIElementRef window = CFArrayGetValueAtIndex(windowsArr, i);
-        if ([[windowInfo objectAtIndex:0] isEqualToString:[AccessibilityWrapper getTitle:window]]) {
-          found = YES;
-        }
-      }
-      if (!found)  {
-        [self removeWindow:windowInfo];
-        SlateLogger(@"  PRUNE Because title mismatch");
-      }
-    }
-  }
 }
 
 - (void)removeWindow:(NSArray *)windowInfo {

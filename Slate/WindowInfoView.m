@@ -45,39 +45,44 @@
 
 - (void)genText {
   SlateLogger(@"WindowInfoView gen text.");
-  NSString *text = @"----------------- Screens -----------------\n";
+  __block NSString *text = @"----------------- Screens -----------------\n";
   ScreenWrapper *sw = [[ScreenWrapper alloc] init];
   NSMutableArray *resolutions = [NSMutableArray array];
   [sw getScreenResolutionStrings:resolutions];
   for (NSInteger i = 0; i < [resolutions count]; i++) {
     text = [text stringByAppendingFormat:@"Left To Right ID: %ld\n  OS X ID: %ld\n  Resolution: %@\n", [sw convertDefaultOrderToLeftToRightOrder:i], i, [resolutions objectAtIndex:i]];
   }
-
-  text = [text stringByAppendingString:@"\n----------------- Windows -----------------\n" ];
-  for (NSRunningApplication *app in [RunningApplications getInstance]) {
-    NSString *appName = [app localizedName];
-    pid_t appPID = [app processIdentifier];
-    SlateLogger(@"I see application '%@' with pid '%d'", appName, appPID);
-    text = [text stringByAppendingFormat:@"\nApplication: %@\n", appName];
-    // Yes, I am aware that the following blocks are inefficient. Deal with it.
-    AXUIElementRef appRef = AXUIElementCreateApplication(appPID);
-    CFArrayRef windowsArrRef = [AccessibilityWrapper windowsInApp:appRef];
-    if (!windowsArrRef || CFArrayGetCount(windowsArrRef) == 0) continue;
-    CFMutableArrayRef windowsArr = CFArrayCreateMutableCopy(kCFAllocatorDefault, 0, windowsArrRef);
-    for (NSInteger i = 0; i < CFArrayGetCount(windowsArr); i++) {
-      SlateLogger(@" Printing Window: %@", [AccessibilityWrapper getTitle:CFArrayGetValueAtIndex(windowsArr, i)]);
-      NSString *title = [AccessibilityWrapper getTitle:CFArrayGetValueAtIndex(windowsArr, i)];
-      if ([title isEqualToString:@""]) continue;
-      AccessibilityWrapper *aw = [[AccessibilityWrapper alloc] initWithApp:appRef window:CFArrayGetValueAtIndex(windowsArr, i)];
-      NSSize size = [aw getCurrentSize];
-      NSPoint badTL = [aw getCurrentTopLeft];
-      NSInteger badScreenID = [sw getScreenIdForRect:NSMakeRect(badTL.x, badTL.y, size.width, size.height)];
-      NSInteger screenID = [sw convertDefaultOrderToLeftToRightOrder:badScreenID];
-      NSPoint tl = [sw convertTopLeftToScreenRelative:badTL screen:badScreenID];
-      text = [text stringByAppendingFormat:@"  Window: '%@'\n    Screen ID (Left to Right): %ld\n    Size: (%ld, %ld)\n    Top Left: (screenOriginX+%ld, screenOriginY+%ld)\n", title, screenID, (NSInteger)size.width, (NSInteger)size.height, (NSInteger)tl.x, (NSInteger)tl.y];
-    }
-  }
-  [self setString:text];
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        
+        text = [text stringByAppendingString:@"\n----------------- Windows -----------------\n" ];
+        for (NSRunningApplication *app in [[[RunningApplications getInstance] apps] copy]) {
+            NSString *appName = [app localizedName];
+            pid_t appPID = [app processIdentifier];
+            SlateLogger(@"I see application '%@' with pid '%d'", appName, appPID);
+            text = [text stringByAppendingFormat:@"\nApplication: %@\n", appName];
+            // Yes, I am aware that the following blocks are inefficient. Deal with it.
+            AXUIElementRef appRef = AXUIElementCreateApplication(appPID);
+            CFArrayRef windowsArrRef = [AccessibilityWrapper windowsInApp:appRef];
+            if (!windowsArrRef || CFArrayGetCount(windowsArrRef) == 0) continue;
+            CFMutableArrayRef windowsArr = CFArrayCreateMutableCopy(kCFAllocatorDefault, 0, windowsArrRef);
+            for (NSInteger i = 0; i < CFArrayGetCount(windowsArr); i++) {
+                SlateLogger(@" Printing Window: %@", [AccessibilityWrapper getTitle:CFArrayGetValueAtIndex(windowsArr, i)]);
+                NSString *title = [AccessibilityWrapper getTitle:CFArrayGetValueAtIndex(windowsArr, i)];
+                if ([title isEqualToString:@""]) continue;
+                AccessibilityWrapper *aw = [[AccessibilityWrapper alloc] initWithApp:appRef window:CFArrayGetValueAtIndex(windowsArr, i)];
+                NSSize size = [aw getCurrentSize];
+                NSPoint badTL = [aw getCurrentTopLeft];
+                NSInteger badScreenID = [sw getScreenIdForRect:NSMakeRect(badTL.x, badTL.y, size.width, size.height)];
+                NSInteger screenID = [sw convertDefaultOrderToLeftToRightOrder:badScreenID];
+                NSPoint tl = [sw convertTopLeftToScreenRelative:badTL screen:badScreenID];
+                text = [text stringByAppendingFormat:@"  Window: '%@'\n    Screen ID (Left to Right): %ld\n    Size: (%ld, %ld)\n    Top Left: (screenOriginX+%ld, screenOriginY+%ld)\n", title, screenID, (NSInteger)size.width, (NSInteger)size.height, (NSInteger)tl.x, (NSInteger)tl.y];
+            }
+        }
+        dispatch_async(dispatch_get_main_queue(), ^{
+            
+            [self setString:text];
+        });
+    });
 }
 
 @end
